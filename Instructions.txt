@@ -1,0 +1,19 @@
+How to setup
+
+Put the project folder in C:\xampp\htdocs
+
+So its gonna be C:\xampp\htdocs\SilidCheck
+
+Then open Xaamp and go to myphpadmin and make a database named silidcheck_db (strict on the name because of the connection a simple spelling or typing mistake could make it explode)
+
+after making a database name silidcheck_db import the sql file
+
+
+After setting up the database your done 
+
+The link is http://localhost/silidcheck
+
+
+The admin account is user:mayumi@gmail.com , Password:admin123
+
+or you can make your own account using the signup feature in the front page

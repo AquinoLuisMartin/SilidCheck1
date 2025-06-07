@@ -1,0 +1,193 @@
+ body {
+            font-family: Arial, sans-serif;
+            background-color: hsl(240, 29%, 97%);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+            background-image: url('assets/pics/cyan-bg.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        /*!--#selection-screen{ }*/
+            
+        #silid-check-font {
+           position:fixed;
+           top: 7%;
+        }
+        
+        .navbar {
+            width: 100vw;
+            background: rgba(185, 224, 210, 0.85);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 60px;
+            z-index: 100;
+         
+        }
+
+        .navbar-logo {
+            display: flex;
+            align-items: center;      /* Vertically center logo and text */
+            font-weight: bold;
+            font-size: 1.5rem;
+            color: rgba(9, 17, 14, 0.85);
+            letter-spacing: 1px;
+        }
+
+        .navbar-logo img {
+            height: 40px;
+            width: 40px;
+            margin-right: 12px;       /* Space between logo and text */
+        }
+        
+        .navbar-links {
+            list-style: none;
+            display: flex;
+            gap: 30px;
+            margin: 0;
+            padding: 0;
+        }
+
+        .navbar-links li a {
+            text-decoration: none;
+            color: #333;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: color 0.2s;
+        }
+
+        .navbar-links li a:hover {
+            color: #db3495;
+        }
+
+        .role-selection {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 20px;
+        }
+
+        .role-card:hover {
+            transform: scale(1.05);
+        }
+
+        .role-card h2 {
+            margin: 0;
+            font-size: 18px;
+            color: #333;
+        }
+
+        .role-image {
+            width: 230px;
+            height: auto;
+            border-radius: 12px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: none;
+            outline: none;
+            margin-top: 70px;
+        }
+
+        .role-card:hover .role-image {
+            transform: scale(1.1); 
+        }
+
+        .role-image-btn:hover {
+            transform: scale(1.08);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+        }
+
+       #silid-check-font {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 30px;   /* More space below */
+        text-align: center;
+        margin-top: 30px;      /* Space from the top */
+        }
+    
+        #silid-check-font h1 {
+         margin: 0;
+         font-size: 2.5rem;
+         letter-spacing: 2px;
+         font-family: 'Arial', sans-serif;
+         font-weight: bold;
+         color: #333;
+         text-align: center;
+         word-wrap: break-word;
+
+        }
+
+        #login-form, #signup-form {
+            display: none; 
+            background-color:  rgba(182, 241, 220, 0.85);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 300px;
+            text-align: center;
+            margin-top: 90px;
+        }
+
+        #login-form h1,#signup-form h1 {
+            margin-bottom: 20px;
+            font-size: 24px;
+            color: #333;
+        }
+
+        #login-form label,#signup-form label {
+            display: block;
+            text-align: left;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+
+        #login-form input[type="text"],
+        #login-form input[type="password"],
+        #signup-form input[type="text"],
+        #signup-form input[type="password"]
+         {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        #login-form button,#signup-form button {
+            background-color: #80d4a0;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+        }
+
+        #login-form button:hover, #signup-form button:hover {
+            background-color: #54e8ac;
+        }
+        footer {
+            position: absolute;
+            bottom: 10px;
+            text-align: center;
+            width: 100%;
+            color: #555;
+        }
