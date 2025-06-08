@@ -1,16 +1,24 @@
 <?php
 session_start();
 include 'db_connect.php';
+
 // Fetch student name from DB if not set in session
 if (!isset($_SESSION['student_name']) && isset($_SESSION['student_id'])) {
+    // Get student information using stored procedure
     $student_id = $_SESSION['student_id'];
-    $stmt = $conn->prepare('SELECT name FROM students WHERE id = ?');
+    
+    // Use GetStudentById stored procedure instead of direct SQL query
+    $stmt = $conn->prepare("CALL GetStudentById(?)");
     $stmt->bind_param('i', $student_id);
     $stmt->execute();
-    $stmt->bind_result($student_name);
-    if ($stmt->fetch()) {
-        $_SESSION['student_name'] = $student_name;
+    $result = $stmt->get_result();
+    
+    if ($result && $row = $result->fetch_assoc()) {
+        // Store the student's name in the session
+        $_SESSION['student_name'] = $row['first_name'] . ' ' . $row['last_name'];
     }
+    
+    // Close the statement
     $stmt->close();
 }
 ?>
@@ -139,24 +147,34 @@ if (!isset($_SESSION['student_name']) && isset($_SESSION['student_id'])) {
       <nav>
         <h2>Student Dashboard</h2>
         <ul>
-          <li id="menu-home" class="active">Home</li>
-          <li id="menu-exams">Quiz/Exams</li>
-          <li id="menu-performance">Performance</li>
-          <li id="menu-scores">Scores</li>
+          <li id="menu-home" class="active">
+            <a href="student_dashboard.php">Home</a>
+          </li>
+          <li id="menu-exams">
+            <a href="student_exams.php">Quiz/Exams</a>
+          </li>
+          <li id="menu-performance">
+            <a href="student_performance.php">Performance</a>
+          </li>
+          <li id="menu-scores">
+            <a href="student_scores.php">Scores</a>
+          </li>
         </ul>
         <div class="settings">
           <h3>Account Settings</h3>
           <ul>
-            <li id="logout-btn">Logout</li>
+            <li id="logout-btn">
+              <a href="javascript:void(0);" onclick="document.getElementById('logoutModal').style.display='block';">Logout</a>
+            </li>
           </ul>
-          <div id="logoutModal" class="modal" style="display:none;z-index:99999;position:fixed;left:0;top:0;width:100vw;height:100vh;background:rgba(0,0,0,0.25);">
+            <div id="logoutModal" class="modal" style="display:none;z-index:99999;position:fixed;left:0;top:0;width:100vw;height:100vh;background:rgba(0,0,0,0.25);">
             <div class="modal-content" style="max-width:350px;text-align:center;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;padding:32px 24px 24px 24px;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.15);">
               <h2 style="margin-bottom:24px;">Confirm Logout</h2>
               <p>Are you sure you want to logout?</p>
-              <button id="confirmLogoutBtn" style="margin:10px 10px 0 0;">Yes, Logout</button>
-              <button onclick="closeLogoutModal()">Cancel</button>
+              <a href="../logout.php" id="confirmLogoutBtn" style="display:inline-block;margin:10px 10px 0 0;background:#2ec4b6;color:#fff;border:none;border-radius:6px;padding:8px 20px;font-weight:600;cursor:pointer;text-decoration:none;">Yes, Logout</a>
+              <button onclick="closeLogoutModal()" style="background:#f3fbfa;color:#2ec4b6;border:none;border-radius:6px;padding:8px 20px;font-weight:600;cursor:pointer;">Cancel</button>
             </div>
-          </div>
+            </div>
         </div>
       </nav>
     </aside>
@@ -212,21 +230,29 @@ if (!isset($_SESSION['student_name']) && isset($_SESSION['student_id'])) {
         <?php
         if (isset($_SESSION['student_id'])) {
           $student_id = intval($_SESSION['student_id']);
-          $sql = "SELECT qr.*, q.title, q.subject, (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id = q.id) as total_items FROM quiz_results qr JOIN quizzes q ON qr.quiz_id = q.id WHERE qr.student_id = $student_id ORDER BY qr.taken_at DESC";
-          $result = $conn->query($sql);
+          
+          // Use GetStudentQuizzes stored procedure instead of inline SQL
+          $stmt = $conn->prepare("CALL GetStudentQuizzes(?)");
+          $stmt->bind_param('i', $student_id);
+          $stmt->execute();
+          $result = $stmt->get_result();
+          
           if ($result && $result->num_rows > 0) {
             while ($row = $result->fetch_assoc()) {
               echo '<tr style="border-bottom:1px solid #e0f7fa;">';
               echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['title']) . '</td>';
               echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['subject']) . '</td>';
               echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['score']) . '</td>';
-              echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['total_items']) . '</td>';
+              echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['max_score']) . '</td>';
               echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['taken_at']) . '</td>';
               echo '</tr>';
             }
           } else {
             echo '<tr><td colspan="5" style="padding:12px 8px;text-align:center;">No quiz scores found.</td></tr>';
           }
+          
+          // Close the statement
+          $stmt->close();
         } else {
           echo '<tr><td colspan="5" style="padding:12px 8px;text-align:center;">Not logged in.</td></tr>';
         }

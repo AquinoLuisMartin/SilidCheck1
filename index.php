@@ -10,17 +10,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['name'], $_POST['email
     $confirm_password = $_POST['confirm-password'];
     if ($password === $confirm_password) {
         // Check if email already exists for teachers
-        $check_stmt = $conn->prepare("SELECT id FROM teachers WHERE email = ?");
+        $check_stmt = $conn->prepare("CALL CheckEmailExists(?, 'teacher')");
         $check_stmt->bind_param("s", $email);
         $check_stmt->execute();
-        $check_stmt->store_result();
-        if ($check_stmt->num_rows > 0) {
+        $result = $check_stmt->get_result();
+        $row = $result->fetch_assoc();
+        
+        if ($row['exists_count'] > 0) {
             $signup_error = "Email is already registered as a teacher.";
         } else {
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $conn->prepare("INSERT INTO teachers (name, email, subject, password) VALUES (?, ?, ?, ?)");
-            $stmt->bind_param("ssss", $name, $email, $subject, $hashed_password);
+            
+            // Use RegisterTeacher stored procedure
+            $stmt = $conn->prepare("CALL RegisterTeacher(?, ?, ?)");
+            $stmt->bind_param("sss", $name, $email, $hashed_password);
             $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            $teacher_id = $row['teacher_id'];
+            
+            // Replace inline SQL with UpdateTeacherSubject stored procedure
+            $update_stmt = $conn->prepare("CALL UpdateTeacherSubject(?, ?)");
+            $update_stmt->bind_param("is", $teacher_id, $subject);
+            $update_stmt->execute();
+            $update_stmt->close();
+            
             $stmt->close();
             $signup_success = true;
         }
@@ -39,17 +53,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['name'], $_POST['email
     $confirm_password = $_POST['confirm-password'];
     if ($password === $confirm_password) {
         // Check if email already exists for students
-        $check_stmt = $conn->prepare("SELECT id FROM students WHERE email = ?");
+        $check_stmt = $conn->prepare("CALL CheckEmailExists(?, 'student')");
         $check_stmt->bind_param("s", $email);
         $check_stmt->execute();
-        $check_stmt->store_result();
-        if ($check_stmt->num_rows > 0) {
+        $result = $check_stmt->get_result();
+        $row = $result->fetch_assoc();
+        
+        if ($row['exists_count'] > 0) {
             $signup_error = "Email is already registered as a student.";
         } else {
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $conn->prepare("INSERT INTO students (name, email, grade, password) VALUES (?, ?, ?, ?)");
-            $stmt->bind_param("ssss", $name, $email, $grade, $hashed_password);
+            
+            // Use RegisterStudent stored procedure
+            $stmt = $conn->prepare("CALL RegisterStudent(?, ?, ?)");
+            $stmt->bind_param("sss", $name, $email, $hashed_password);
             $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            $student_id = $row['student_id'];
+            
+            // Replace inline SQL with UpdateStudentGrade stored procedure
+            $update_stmt = $conn->prepare("CALL UpdateStudentGrade(?, ?)");
+            $update_stmt->bind_param("is", $student_id, $grade);
+            $update_stmt->execute();
+            $update_stmt->close();
+            
             $stmt->close();
             $signup_success = true;
         }
@@ -64,47 +92,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'], $_POST['pass
     $email = trim($_POST['email']);
     $password = $_POST['password'];
     $type = $_POST['login-type'];
+    
     if ($type === 'teacher') {
-        $stmt = $conn->prepare("SELECT id, password FROM teachers WHERE email = ?");
+        // Use AuthenticateTeacher stored procedure
+        $stmt = $conn->prepare("CALL AuthenticateTeacher(?)");
         $stmt->bind_param("s", $email);
     } else {
-        $stmt = $conn->prepare("SELECT id, password FROM students WHERE email = ?");
+        // Use AuthenticateStudent stored procedure
+        $stmt = $conn->prepare("CALL AuthenticateStudent(?)");
         $stmt->bind_param("s", $email);
     }
+    
     $stmt->execute();
-    $stmt->store_result();
-    if ($stmt->num_rows > 0) {
-        $stmt->bind_result($id, $hashed_password);
-        $stmt->fetch();
+    $result = $stmt->get_result();
+    
+    if ($result && $result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        $id = $row['id'];
+        $hashed_password = $row['password'];
+        
         if (password_verify($password, $hashed_password)) {
             // Login success: set session, redirect, etc.
             session_start();
             $_SESSION['user_id'] = $id;
             $_SESSION['user_type'] = $type;
+            
             if ($type === 'teacher') {
                 $_SESSION['teacher_id'] = $id;
-                // Fetch teacher name and store in session
-                $name_stmt = $conn->prepare("SELECT name FROM teachers WHERE id = ?");
-                $name_stmt->bind_param("i", $id);
-                $name_stmt->execute();
-                $name_stmt->bind_result($teacher_name);
-                if ($name_stmt->fetch()) {
-                    $_SESSION['teacher_name'] = $teacher_name;
-                }
-                $name_stmt->close();
+                // Store teacher name in session
+                $_SESSION['teacher_name'] = $row['name'];
             } else {
                 $_SESSION['student_id'] = $id;
+                // Store student name in session
+                $_SESSION['student_name'] = $row['name'];
             }
+            
             // Show success modal instead of redirecting immediately
             $login_success = true;
-            // header('Location: Dashboard/' . ($type === 'teacher' ? 'teacher_dashboard.php' : 'student_dashboard.php'));
-            // exit;
         } else {
             $login_error = "Invalid password.";
         }
     } else {
         $login_error = "No account found with that email.";
     }
+    
     $stmt->close();
 }
 ?>

@@ -28,26 +28,23 @@ if (!in_array($status, $valid_statuses)) {
 }
 
 try {
-    // First verify this quiz belongs to the logged-in teacher
-    $stmt = $conn->prepare("SELECT id FROM quizzes WHERE id = ? AND teacher_id = ?");
-    $stmt->bind_param("ii", $quiz_id, $teacher_id);
+    // Use UpdateQuizStatus stored procedure to verify ownership and update status in one call
+    $stmt = $conn->prepare("CALL UpdateQuizStatus(?, ?, ?)");
+    $stmt->bind_param("isi", $quiz_id, $status, $teacher_id);
     $stmt->execute();
     $result = $stmt->get_result();
     
-    if ($result->num_rows === 0) {
-        echo json_encode(['success' => false, 'message' => 'Quiz not found or access denied']);
-        exit;
-    }
-    
-    // Update the quiz status
-    $stmt = $conn->prepare("UPDATE quizzes SET status = ? WHERE id = ?");
-    $stmt->bind_param("si", $status, $quiz_id);
-    $stmt->execute();
-    
-    if ($stmt->affected_rows > 0) {
-        $response = ['success' => true];
+    if ($result) {
+        $row = $result->fetch_assoc();
+        
+        // The stored procedure returns success status and message
+        if ($row['success']) {
+            $response = ['success' => true, 'message' => $row['message']];
+        } else {
+            $response = ['success' => false, 'message' => $row['message']];
+        }
     } else {
-        $response = ['success' => false, 'message' => 'No changes made'];
+        $response = ['success' => false, 'message' => 'Error executing stored procedure'];
     }
 } catch (Exception $e) {
     $response = ['success' => false, 'message' => 'Error: ' . $e->getMessage()];

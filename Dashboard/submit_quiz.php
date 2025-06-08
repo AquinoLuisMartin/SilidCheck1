@@ -21,8 +21,8 @@ $answers = $_POST['answer'];
 $response = ['success' => false];
 
 try {
-    // Get correct answers for grading
-    $stmt = $conn->prepare("SELECT id, question, correct_answer FROM quiz_questions WHERE quiz_id = ?");
+    // Use GetQuizQuestions stored procedure to get correct answers for grading
+    $stmt = $conn->prepare("CALL GetQuizQuestions(?)");
     $stmt->bind_param("i", $quiz_id);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -31,6 +31,9 @@ try {
     while ($row = $result->fetch_assoc()) {
         $questions[$row['id']] = $row;
     }
+    
+    // Close the statement before executing another query
+    $stmt->close();
     
     // Grade the quiz
     $score = 0;
@@ -49,12 +52,19 @@ try {
         // Calculate time taken (would need to be tracked client-side and sent)
         $time_taken = isset($_POST['time_taken']) ? intval($_POST['time_taken']) : 0;
         
+        // Save JSON encoded answers for reference
+        $answers_json = json_encode($answers);
+        
         // Use AddResult stored procedure to save the result
-        $stmt->close();
         $stmt = $conn->prepare("CALL AddResult(?, ?, ?, ?, ?)");
         $stmt->bind_param("iiiii", $quiz_id, $student_id, $score, $total, $time_taken);
         $stmt->execute();
-        $resultId = $stmt->get_result();
+        $result = $stmt->get_result();
+        
+        if ($result) {
+            $row = $result->fetch_assoc();
+            $result_id = $row['result_id'];
+        }
         
         $response['success'] = true;
         $response['score'] = $score;

@@ -3,59 +3,60 @@ session_start();
 include 'db_connect.php';
 header('Content-Type: text/html; charset=UTF-8');
 
-if (isset($_GET['performance']) && $_GET['performance'] == '1') {
-    // Dynamically get all subjects the student has taken quizzes in
-    header('Content-Type: application/json');
-    $student_id = isset($_SESSION['student_id']) ? intval($_SESSION['student_id']) : 0;
-    $subjects = [];
-    $stmt = $conn->prepare('SELECT DISTINCT q.subject FROM quiz_results qr JOIN quizzes q ON qr.quiz_id = q.id WHERE qr.student_id = ?');
-    $stmt->bind_param('i', $student_id);
-    $stmt->execute();
-    $stmt->bind_result($subject);
-    while ($stmt->fetch()) {
-        $subjects[] = $subject;
+// Check if user is logged in
+if (!isset($_SESSION['student_id'])) {
+    if (isset($_GET['performance'])) {
+        header('Content-Type: application/json');
+        echo json_encode(['labels' => [], 'scores' => []]);
+    } else {
+        echo '<tr><td colspan="5" style="text-align:center;">Not logged in.</td></tr>';
     }
-    $stmt->close();
-    // Always show all possible subjects, even if the student has no quiz for them
-    $allSubjects = [
-        'Mathematics',
-        'Science',
-        'English'
-    ];
-    $labels = $allSubjects;
-    $scores = [];
-    foreach ($allSubjects as $subject) {
-        $sql = "SELECT AVG(score/total*100) as avg_score FROM quiz_results qr JOIN quizzes q ON qr.quiz_id = q.id WHERE qr.student_id = ? AND q.subject = ? AND qr.total > 0";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param('is', $student_id, $subject);
-        $stmt->execute();
-        $stmt->bind_result($avg_score);
-        $stmt->fetch();
-        $scores[] = $avg_score !== null ? round($avg_score, 2) : 0;
-        $stmt->close();
-    }
-    echo json_encode(['labels' => $labels, 'scores' => $scores]);
-    exit;
+    exit();
 }
 
-if (!isset($_SESSION['student_id'])) {
-    echo '<tr><td colspan="5" style="padding:12px 8px;text-align:center;">Not logged in.</td></tr>';
-    exit;
-}
-$student_id = intval($_SESSION['student_id']);
-$sql = "SELECT qr.*, q.title, q.subject, (SELECT COUNT(*) FROM quiz_questions qq WHERE qq.quiz_id = q.id) as total_items FROM quiz_results qr JOIN quizzes q ON qr.quiz_id = q.id WHERE qr.student_id = $student_id ORDER BY qr.taken_at DESC";
-$result = $conn->query($sql);
-if ($result && $result->num_rows > 0) {
-    while ($row = $result->fetch_assoc()) {
-        echo '<tr style="border-bottom:1px solid #e0f7fa;">';
-        echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['title']) . '</td>';
-        echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['subject']) . '</td>';
-        echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['score']) . '</td>';
-        echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['total_items']) . '</td>';
-        echo '<td style="padding:10px 8px;">' . htmlspecialchars($row['taken_at']) . '</td>';
-        echo '</tr>';
+// Performance data for chart
+if (isset($_GET['performance'])) {
+    $student_id = intval($_SESSION['student_id']);
+    
+    // Use stored procedure for performance chart data
+    $stmt = $conn->prepare("CALL GetStudentPerformanceChartData(?)");
+    $stmt->bind_param('i', $student_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    $labels = [];
+    $scores = [];
+    
+    if ($result && $result->num_rows > 0) {
+        while ($row = $result->fetch_assoc()) {
+            // Calculate percentage score
+            $percentage = 0;
+            if ($row['total_questions'] > 0) {
+                $percentage = round(($row['score'] / $row['total_questions']) * 100);
+            }
+            
+            // Truncate long quiz titles for better display
+            $title = strlen($row['title']) > 15 ? substr($row['title'], 0, 15) . '...' : $row['title'];
+            
+            // Add to arrays
+            $labels[] = $title;
+            $scores[] = $percentage;
+        }
+        
+        // Reverse arrays to show oldest to newest
+        $labels = array_reverse($labels);
+        $scores = array_reverse($scores);
     }
-} else {
-    echo '<tr><td colspan="5" style="padding:12px 8px;text-align:center;">No quiz scores found.</td></tr>';
+    
+    // Close statement and clear result
+    $stmt->close();
+    
+    header('Content-Type: application/json');
+    echo json_encode(['labels' => $labels, 'scores' => $scores]);
+    exit();
 }
+
+// Regular scores data for the table
+// Your existing code for displaying quiz scores can remain the same or you can
+// create another stored procedure for it
 ?>

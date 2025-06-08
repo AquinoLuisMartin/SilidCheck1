@@ -17,7 +17,6 @@ $title = isset($_POST['quiz_title']) ? trim($_POST['quiz_title']) : '';
 $subject = isset($_POST['quiz_subject']) ? trim($_POST['quiz_subject']) : '';
 $questions = isset($_POST['question']) ? $_POST['question'] : [];
 $answers = isset($_POST['answer']) ? $_POST['answer'] : [];
-// Remove quiz_status handling
 $status = 'ongoing'; // Always set to ongoing or use your DB default
 
 if ($title === '' || $subject === '' || !is_array($questions) || count($questions) === 0 || !is_array($answers) || count($answers) !== count($questions)) {
@@ -25,37 +24,61 @@ if ($title === '' || $subject === '' || !is_array($questions) || count($question
     exit;
 }
 
-// Insert quiz
-$stmt = $conn->prepare('INSERT INTO quizzes (teacher_id, title, subject, status, created_at) VALUES (?, ?, ?, ?, NOW())');
-if (!$stmt) {
-    echo json_encode(['success' => false, 'message' => 'Prepare failed: ' . $conn->error]);
-    exit;
-}
-$stmt->bind_param('isss', $teacher_id, $title, $subject, $status);
-if (!$stmt->execute()) {
-    echo json_encode(['success' => false, 'message' => 'Failed to save quiz: ' . $stmt->error]);
-    exit;
-}
-$quiz_id = $stmt->insert_id;
-$stmt->close();
+// Use transaction to ensure all operations succeed or fail together
+$conn->begin_transaction();
 
-// Insert questions with correct answers
-$stmt = $conn->prepare("INSERT INTO quiz_questions (quiz_id, question, correct_answer) VALUES (?, ?, ?)");
-if (!$stmt) {
-    echo json_encode(['success' => false, 'message' => 'Prepare failed (questions): ' . $conn->error]);
-    exit;
-}
-for ($i = 0; $i < count($questions); $i++) {
-    $q = trim($questions[$i]);
-    $a = trim($answers[$i]);
-    if ($q !== '' && $a !== '') {
-        $stmt->bind_param('iss', $quiz_id, $q, $a);
-        if (!$stmt->execute()) {
-            echo json_encode(['success' => false, 'message' => 'Failed to save question: ' . $stmt->error]);
-            exit;
+try {
+    // Use AddTask stored procedure to create the quiz
+    $stmt = $conn->prepare("CALL AddTask(?, ?, NULL, ?, NULL, ?)");
+    $stmt->bind_param('ssis', $title, $subject, $teacher_id, $status);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if (!$result) {
+        throw new Exception("Failed to create quiz: " . $conn->error);
+    }
+    
+    $row = $result->fetch_assoc();
+    $quiz_id = $row['quiz_id'];
+    $stmt->close();
+    
+    // Use CreateQuestion stored procedure to add each question
+    foreach ($questions as $i => $question_text) {
+        $q = trim($question_text);
+        $a = trim($answers[$i]);
+        
+        if ($q !== '' && $a !== '') {
+            // Create empty options JSON structure for multiple choice questions
+            $options = json_encode([
+                'A' => '',
+                'B' => '',
+                'C' => '',
+                'D' => ''
+            ]);
+            
+            // Using CreateQuestion procedure which handles simple text questions
+            $stmt = $conn->prepare("CALL CreateQuestion(?, ?, 'text', ?, ?)");
+            $stmt->bind_param('isss', $quiz_id, $q, $options, $a);
+            $stmt->execute();
+            $stmt->close();
         }
     }
+    
+    // If we got this far, commit the transaction
+    $conn->commit();
+    echo json_encode(['success' => true, 'message' => 'Quiz saved successfully.', 'quiz_id' => $quiz_id]);
+    
+} catch (Exception $e) {
+    // Roll back the transaction if any part failed
+    $conn->rollback();
+    echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+} finally {
+    // Make sure to close any open statements
+    if (isset($stmt) && $stmt instanceof mysqli_stmt) {
+        $stmt->close();
+    }
+    
+    // Close the database connection
+    $conn->close();
 }
-$stmt->close();
-
-echo json_encode(['success' => true, 'message' => 'Quiz saved successfully.']);
+?>

@@ -25,51 +25,64 @@ $is_teacher = isset($_SESSION['teacher_id']);
 $user_id = $is_teacher ? $_SESSION['teacher_id'] : $_SESSION['student_id'];
 
 try {
-    // Get basic quiz info
-    $sql = "SELECT title, subject, description, time_limit, status, teacher_id FROM quizzes WHERE id = ?";
-    
-    // For students, only allow access to published quizzes
-    if (!$is_teacher) {
-        $sql .= " AND status = 'published'";
+    if ($is_teacher) {
+        // Get quizzes for teacher using stored procedure
+        $stmt = $conn->prepare("CALL GetQuizzes(?, NULL, NULL)");
+        $stmt->bind_param("i", $user_id);
+    } else {
+        // Get quizzes for student using stored procedure
+        $stmt = $conn->prepare("CALL GetQuizzes(NULL, NULL, ?)");
+        $stmt->bind_param("i", $user_id);
     }
     
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $quiz_id);
     $stmt->execute();
     $result = $stmt->get_result();
     
-    if ($result->num_rows > 0) {
-        $quiz = $result->fetch_assoc();
-        
+    // Find the specific quiz in the results
+    $found_quiz = null;
+    while ($row = $result->fetch_assoc()) {
+        if ($row['quiz_id'] == $quiz_id) {
+            $found_quiz = $row;
+            break;
+        }
+    }
+    
+    // Close the statement to free resources before creating a new one
+    $stmt->close();
+    
+    if ($found_quiz) {
         // If teacher, verify ownership
-        if ($is_teacher && $quiz['teacher_id'] != $user_id) {
+        if ($is_teacher && $found_quiz['teacher_id'] != $user_id) {
             echo json_encode(['success' => false, 'message' => 'Access denied']);
             exit;
         }
         
-        // Get question count
-        $stmt = $conn->prepare("SELECT COUNT(*) as question_count FROM quiz_questions WHERE quiz_id = ?");
+        // Get question count using GetQuestions stored procedure
+        $stmt = $conn->prepare("CALL GetQuestions(?)");
         $stmt->bind_param("i", $quiz_id);
         $stmt->execute();
-        $countResult = $stmt->get_result();
-        $questionCount = $countResult->fetch_assoc()['question_count'];
+        $questionResult = $stmt->get_result();
+        $questionCount = $questionResult->num_rows;
         
-        // For students taking a quiz, we'd need to get actual questions
-        // For teachers/viewing, just return metadata
+        // Close the statement again
+        $stmt->close();
+        
+        // Build response with quiz data
         $response['success'] = true;
         $response['quiz'] = [
             'id' => $quiz_id,
-            'title' => $quiz['title'],
-            'subject' => $quiz['subject'],
-            'description' => $quiz['description'],
-            'time_limit' => $quiz['time_limit'],
-            'status' => $quiz['status'],
+            'title' => $found_quiz['title'],
+            'subject' => $found_quiz['subject_name'],
+            'description' => $found_quiz['description'],
+            'time_limit' => $found_quiz['time_limit'],
+            'total_points' => $found_quiz['total_points'],
+            'due_date' => $found_quiz['due_date'],
             'questions' => $questionCount
         ];
         
         // If student is taking quiz, include actual questions
-        if (!$is_teacher && $quiz['status'] == 'published' && isset($_GET['take'])) {
-            // Use GetQuizQuestions stored procedure
+        if (!$is_teacher && isset($_GET['take'])) {
+            // Use GetQuizQuestions stored procedure to get questions
             $stmt = $conn->prepare("CALL GetQuizQuestions(?)");
             $stmt->bind_param("i", $quiz_id);
             $stmt->execute();
@@ -101,9 +114,12 @@ try {
 }
 
 // Close statement if it exists
-if (isset($stmt)) {
+if (isset($stmt) && $stmt instanceof mysqli_stmt) {
     $stmt->close();
 }
+
+// Close connection
+$conn->close();
 
 // Return JSON response
 header('Content-Type: application/json');
