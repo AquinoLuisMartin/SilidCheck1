@@ -29,22 +29,31 @@ $students = [];
 $teacher_id = isset($_SESSION['teacher_id']) ? intval($_SESSION['teacher_id']) : 0;
 $search = isset($_GET['search']) ? $_GET['search'] : '';
 
-// Use stored procedure to get students
-if (!empty($search)) {
-    $stmt = $conn->prepare("CALL SearchStudents(?)");
-    $stmt->bind_param('s', $search);
-} else {
-    $stmt = $conn->prepare("CALL GetAllStudents()");
-}
-$stmt->execute();
-$result = $stmt->get_result();
-
-if ($result) {
-    while ($row = $result->fetch_assoc()) {
-        $students[] = $row;
+try {
+    // Use stored procedure to get students
+    if (!empty($search)) {
+        $stmt = $conn->prepare("CALL SearchStudentsForTeacher(?, ?)");
+        $stmt->bind_param('is', $teacher_id, $search);
+    } else {
+        $stmt = $conn->prepare("CALL GetAllStudentsForTeacher(?)");
+        $stmt->bind_param('i', $teacher_id);
     }
+
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $students[] = $row;
+        }
+    }
+    $stmt->close();
+    $conn->next_result(); // Clear the previous result
+} catch (Exception $e) {
+    // Log error but don't display it
+    error_log("Error in teacher_view_students.php: " . $e->getMessage());
+    // Don't do anything else - we'll just display an empty students array
 }
-$stmt->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -66,121 +75,76 @@ $stmt->close();
       padding: 20px;
       margin-bottom: 20px;
       display: flex;
+      flex-wrap: wrap;
       gap: 15px;
       align-items: center;
     }
     .search-panel input {
-      flex: 1;
-      padding: 12px;
+      padding: 10px;
       border-radius: 6px;
       border: 1px solid #b2dfdb;
-      font-size: 16px;
+      background: #f5f5f5;
+      flex-grow: 1;
+      min-width: 200px;
     }
     .search-panel button {
       background: #2ec4b6;
       color: white;
       border: none;
-      padding: 12px 20px;
+      padding: 10px 20px;
       border-radius: 6px;
       font-weight: bold;
       cursor: pointer;
-      font-size: 16px;
     }
     .search-panel button:hover {
       background: #25aaa0;
     }
-    .students-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 20px;
-    }
-    .student-card {
+    .students-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
       background: white;
       border-radius: 12px;
-      box-shadow: 0 2px 10px rgba(44,196,182,0.10);
-      padding: 20px;
-      transition: transform 0.2s, box-shadow 0.2s;
-      position: relative;
-    }
-    .student-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 6px 15px rgba(44,196,182,0.15);
-    }
-    .student-card .avatar {
-      width: 80px;
-      height: 80px;
-      border-radius: 50%;
-      background: #e0f7fa;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 32px;
-      color: #2ec4b6;
-      margin: 0 auto 15px auto;
-    }
-    .student-card h3 {
-      text-align: center;
-      margin: 0 0 5px 0;
-      font-size: 18px;
-      font-weight: 600;
-    }
-    .student-card .student-id {
-      text-align: center;
-      color: #666;
-      margin-bottom: 15px;
-      font-size: 14px;
-    }
-    .student-card .details {
-      margin-top: 15px;
-    }
-    .student-card .details p {
-      margin: 5px 0;
-      display: flex;
-      justify-content: space-between;
-      font-size: 14px;
-    }
-    .student-card .details strong {
-      color: #333;
-    }
-    .student-card .view-btn {
-      display: block;
-      background: #2ec4b6;
-      color: white;
-      text-align: center;
-      padding: 10px;
-      border-radius: 6px;
-      text-decoration: none;
-      margin-top: 15px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .student-card .view-btn:hover {
-      background: #25aaa0;
-    }
-    .no-results {
-      text-align: center;
-      padding: 40px 20px;
-      background: white;
-      border-radius: 12px;
-      grid-column: 1 / -1;
+      overflow: hidden;
       box-shadow: 0 2px 10px rgba(44,196,182,0.10);
     }
-    .status-badge {
-      position: absolute;
-      top: 15px;
-      right: 15px;
-      padding: 5px 10px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .status-active {
+    .students-table th {
       background: #e6f9ed;
       color: #2a7a66;
+      padding: 15px;
+      text-align: left;
+      font-weight: 600;
+      border-bottom: 2px solid #b7e4c7;
     }
-    .status-inactive {
-      background: #ffebee;
-      color: #d32f2f;
+    .students-table td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #e0f7fa;
+    }
+    .students-table tr:last-child td {
+      border-bottom: none;
+    }
+    .view-button {
+      background: #2ec4b6;
+      color: white;
+      border: none;
+      padding: 8px 15px;
+      border-radius: 4px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 14px;
+    }
+    .view-button:hover {
+      background: #25aaa0;
+    }
+    .no-students {
+      text-align: center;
+      padding: 30px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(44,196,182,0.10);
+      color: #666;
     }
     
     /* Sidebar styling */
@@ -218,104 +182,31 @@ $stmt->close();
       font-size: 16px;
     }
     
-    /* Student Profile Modal */
-    .student-modal {
-      display: none;
-      position: fixed;
-      z-index: 9999;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0,0,0,0.4);
-      overflow-y: auto;
-    }
-    .student-modal-content {
-      background-color: #fefefe;
-      margin: 50px auto;
-      padding: 20px;
-      border-radius: 12px;
-      width: 80%;
-      max-width: 700px;
-      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-    }
-    .close-modal {
-      color: #aaa;
-      float: right;
-      font-size: 28px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    .close-modal:hover,
-    .close-modal:focus {
-      color: black;
-      text-decoration: none;
-      cursor: pointer;
-    }
-    .student-profile {
-      padding: 20px 0;
-    }
-    .student-profile-header {
-      display: flex;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-    .student-profile-avatar {
-      width: 100px;
-      height: 100px;
-      border-radius: 50%;
-      background: #e0f7fa;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 40px;
-      color: #2ec4b6;
-      margin-right: 20px;
-    }
-    .student-profile-info h2 {
-      margin: 0 0 5px 0;
-    }
-    .student-profile-info p {
-      margin: 0;
-      color: #666;
-    }
+    /* Student stats */
     .student-stats {
       display: flex;
       flex-wrap: wrap;
       gap: 20px;
-      margin: 20px 0;
+      margin-bottom: 20px;
     }
-    .student-stat-card {
+    .stat-card {
       flex: 1;
-      min-width: 120px;
-      background: #f8f9fa;
-      border-radius: 10px;
-      padding: 15px;
+      min-width: 180px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(44,196,182,0.10);
+      padding: 20px;
       text-align: center;
     }
-    .student-stat-card .value {
-      font-size: 24px;
+    .stat-card h3 {
+      margin: 0 0 10px 0;
+      color: #333;
+      font-size: 16px;
+    }
+    .stat-card .value {
+      font-size: 28px;
       font-weight: bold;
       color: #2ec4b6;
-      margin-bottom: 5px;
-    }
-    .student-stat-card .label {
-      font-size: 14px;
-      color: #666;
-    }
-    .student-scores-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    .student-scores-table th {
-      background: #e6f9ed;
-      text-align: left;
-      padding: 10px;
-    }
-    .student-scores-table td {
-      padding: 10px;
-      border-bottom: 1px solid #eee;
     }
   </style>
 </head>
@@ -397,43 +288,112 @@ $stmt->close();
         <!-- View Students Content -->
         <section class="dashboard-body">
           <div class="students-container">
-            <!-- Search Panel -->
-            <div class="search-panel">
-              <input type="text" id="search-input" placeholder="Search by student name or ID" value="<?php echo htmlspecialchars($search); ?>">
-              <button id="search-btn">Search</button>
-              <button id="reset-search-btn">Reset</button>
-            </div>
-            
-            <!-- Students Grid -->
-            <div class="students-grid">
+            <!-- Student Statistics -->
+            <div class="student-stats">
               <?php
-              if (!empty($students)) {
-                foreach ($students as $student) {
-                  // Get initials for avatar
-                  $initials = strtoupper(substr($student['first_name'], 0, 1) . substr($student['last_name'], 0, 1));
-                  
-                  echo '<div class="student-card">';
-                  echo '<span class="status-badge ' . ($student['is_active'] ? 'status-active' : 'status-inactive') . '">' . ($student['is_active'] ? 'Active' : 'Inactive') . '</span>';
-                  echo '<div class="avatar">' . $initials . '</div>';
-                  echo '<h3>' . htmlspecialchars($student['first_name'] . ' ' . $student['last_name']) . '</h3>';
-                  echo '<div class="student-id">ID: ' . htmlspecialchars($student['student_id']) . '</div>';
-                  echo '<div class="details">';
-                  echo '<p><strong>Email:</strong> ' . htmlspecialchars($student['email']) . '</p>';
-                  echo '<p><strong>Year Level:</strong> ' . htmlspecialchars($student['year_level']) . '</p>';
-                  echo '<p><strong>Quizzes Taken:</strong> ' . intval($student['quizzes_taken']) . '</p>';
-                  echo '<p><strong>Avg. Score:</strong> ' . number_format(floatval($student['avg_score']), 1) . '%</p>';
-                  echo '</div>';
-                  echo '<a class="view-btn" onclick="viewStudentProfile(' . $student['id'] . ')">View Profile</a>';
-                  echo '</div>';
+              try {
+                if (isset($_SESSION['teacher_id'])) {
+                    $teacher_id = intval($_SESSION['teacher_id']);
+                    $stmt = $conn->prepare("CALL GetStudentStatistics(?)");
+                    $stmt->bind_param('i', $teacher_id);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    
+                    if ($result && $row = $result->fetch_assoc()) {
+                      echo '<div class="stat-card">';
+                      echo '<h3>Total Students</h3>';
+                      echo '<div class="value">' . $row['total_students'] . '</div>';
+                      echo '</div>';
+                      
+                      echo '<div class="stat-card">';
+                      echo '<h3>Active Students</h3>';
+                      echo '<div class="value">' . $row['active_students'] . '</div>';
+                      echo '</div>';
+                      
+                      echo '<div class="stat-card">';
+                      echo '<h3>Average Quiz Participation</h3>';
+                      echo '<div class="value">' . number_format($row['avg_participation'], 1) . '</div>';
+                      echo '</div>';
+                    }
+                    $stmt->close();
+                    $conn->next_result(); // Clear the previous result
                 }
-              } else {
-                echo '<div class="no-results">';
-                echo '<h3>No students found</h3>';
-                echo '<p>Try a different search term or view all students.</p>';
+              } catch (Exception $e) {
+                // If stored procedure fails, show default values
+                echo '<div class="stat-card">';
+                echo '<h3>Total Students</h3>';
+                echo '<div class="value">' . count($students) . '</div>';
+                echo '</div>';
+                
+                echo '<div class="stat-card">';
+                echo '<h3>Active Students</h3>';
+                echo '<div class="value">' . count($students) . '</div>';
+                echo '</div>';
+                
+                echo '<div class="stat-card">';
+                echo '<h3>Average Quiz Participation</h3>';
+                echo '<div class="value">-</div>';
                 echo '</div>';
               }
               ?>
             </div>
+            
+            <!-- Search Panel -->
+            <div class="search-panel">
+              <form method="get" action="" style="display:flex;width:100%;gap:15px;">
+                <input type="text" name="search" placeholder="Search by student name or grade" value="<?php echo htmlspecialchars($search); ?>">
+                <button type="submit">Search</button>
+                <?php if (!empty($search)): ?>
+                  <a href="teacher_view_students.php" style="padding:10px;text-decoration:none;color:#555;">Clear</a>
+                <?php endif; ?>
+              </form>
+            </div>
+            
+            <!-- Students Table -->
+            <?php if (!empty($students)): ?>
+              <table class="students-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Grade</th>
+                    <th>Email</th>
+                    <th>Quizzes Taken</th>
+                    <th>Avg. Score</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($students as $student): ?>
+                    <tr>
+                      <td><?php echo htmlspecialchars($student['name']); ?></td>
+                      <td><?php echo htmlspecialchars($student['grade']); ?></td>
+                      <td><?php echo htmlspecialchars($student['email']); ?></td>
+                      <td><?php echo $student['quizzes_taken']; ?></td>
+                      <td>
+                        <?php 
+                        if ($student['avg_score'] !== null) {
+                          echo number_format($student['avg_score'], 1) . '%';
+                        } else {
+                          echo 'N/A';
+                        }
+                        ?>
+                      </td>
+                      <td>
+                        <a href="get_student_profile.php?id=<?php echo $student['id']; ?>" class="view-button">View Profile</a>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            <?php else: ?>
+              <div class="no-students">
+                <?php if (!empty($search)): ?>
+                  <p>No students found matching "<?php echo htmlspecialchars($search); ?>". Please try a different search term.</p>
+                <?php else: ?>
+                  <p>No students available in the system yet. Students will appear here once they register and take quizzes.</p>
+                <?php endif; ?>
+              </div>
+            <?php endif; ?>
           </div>
         </section>
         
@@ -444,68 +404,13 @@ $stmt->close();
     </div>
   </div>
   
-  <!-- Student Profile Modal -->
-  <div id="studentProfileModal" class="student-modal">
-    <div class="student-modal-content">
-      <span class="close-modal" onclick="closeStudentProfileModal()">&times;</span>
-      <div id="studentProfileContent" class="student-profile">
-        <!-- Content will be loaded here via AJAX -->
-        <div style="text-align:center;padding:30px;">Loading student profile...</div>
-      </div>
-    </div>
-  </div>
-  
   <script>
   function closeLogoutModal() {
     document.getElementById('logoutModal').style.display = 'none';
   }
   
-  function viewStudentProfile(studentId) {
-    // Show modal and load content
-    document.getElementById('studentProfileModal').style.display = 'block';
-    
-    // Fetch student profile data
-    fetch('get_student_profile.php?id=' + studentId)
-      .then(response => response.text())
-      .then(html => {
-        document.getElementById('studentProfileContent').innerHTML = html;
-      })
-      .catch(error => {
-        console.error('Error fetching student profile:', error);
-        document.getElementById('studentProfileContent').innerHTML = '<div style="text-align:center;padding:30px;"><h3>Error</h3><p>Could not load student profile. Please try again.</p></div>';
-      });
-  }
-  
-  function closeStudentProfileModal() {
-    document.getElementById('studentProfileModal').style.display = 'none';
-  }
-  
   document.addEventListener('DOMContentLoaded', function() {
-    // Search functionality
-    document.getElementById('search-btn').addEventListener('click', function() {
-      const searchTerm = document.getElementById('search-input').value.trim();
-      window.location.href = 'teacher_view_students.php?search=' + encodeURIComponent(searchTerm);
-    });
-    
-    // Reset search
-    document.getElementById('reset-search-btn').addEventListener('click', function() {
-      window.location.href = 'teacher_view_students.php';
-    });
-    
-    // Enter key in search input
-    document.getElementById('search-input').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        document.getElementById('search-btn').click();
-      }
-    });
-    
-    // Close modal when clicking outside
-    window.onclick = function(event) {
-      const modal = document.getElementById('studentProfileModal');
-      if (event.target === modal) {
-        closeStudentProfileModal();
-      }
-    };
+    // You can add more JavaScript functionality here if needed
   });
   </script>
 </body>

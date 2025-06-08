@@ -46,6 +46,8 @@ if (isset($_SESSION['teacher_id'])) {
 $scores = [];
 if (isset($_SESSION['teacher_id'])) {
     $teacher_id = intval($_SESSION['teacher_id']);
+    
+    // Using stored procedure instead of direct SQL
     $stmt = $conn->prepare("CALL GetRecentQuizScores(?)");
     $stmt->bind_param('i', $teacher_id);
     $stmt->execute();
